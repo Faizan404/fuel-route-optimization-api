@@ -1,0 +1,1269 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fuel Route Planner</title>
+<script>
+  // Apply the saved theme before first paint. Light is the default.
+  try {
+    var saved = localStorage.getItem("theme");
+    if (saved === "dark" || saved === "light") document.documentElement.dataset.theme = saved;
+  } catch (e) {}
+</script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #f0f2f5;
+    --text: #17202b;
+    --muted: #5c6878;
+    --border: #dfe3e9;
+    --accent: #1c5fd0;
+    --accent-hover: #174fb0;
+    --accent-soft: #e8f0fd;
+    --on-accent: #ffffff;
+    --start: #17804d;
+    --finish: #b3261e;
+    --danger: #b3261e;
+    --danger-soft: #fdf0ef;
+    --danger-border: #f1c2be;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 4px 12px rgba(16, 24, 40, .06);
+    --radius: 8px;
+  }
+  :root[data-theme="dark"] {
+    --bg: #10151b;
+    --surface: #181e26;
+    --surface-2: #202833;
+    --text: #e7ebf0;
+    --muted: #9ba7b5;
+    --border: #2c3541;
+    --accent: #6da2ff;
+    --accent-hover: #8ab5ff;
+    --accent-soft: #1b2a44;
+    --on-accent: #0c1420;
+    --start: #4cc38a;
+    --finish: #f2776d;
+    --danger: #f2776d;
+    --danger-soft: #2b1917;
+    --danger-border: #5a2a26;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 12px rgba(0, 0, 0, .3);
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---- Layout ---------------------------------------------------------- */
+  .app { display: grid; grid-template-rows: auto 1fr; height: 100vh; height: 100dvh; }
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 0 20px; height: 56px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  .brand h1 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
+  .brand span { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .icon-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 34px; padding: 0 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    font-size: 13px; color: var(--muted);
+  }
+  .icon-btn:hover { color: var(--text); background: var(--surface-2); }
+  .icon-btn svg { width: 16px; height: 16px; flex: none; }
+
+  .workspace {
+    display: grid; min-height: 0;
+    grid-template-columns: 420px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "search map" "results map";
+  }
+  .search { grid-area: search; padding: 20px 20px 16px; background: var(--surface); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .results { grid-area: results; overflow-y: auto; background: var(--surface); border-right: 1px solid var(--border); }
+  .map-wrap { grid-area: map; position: relative; min-height: 0; }
+  #map { position: absolute; inset: 0; background: var(--surface-2); }
+
+  /* ---- Search form ----------------------------------------------------- */
+  .field { position: relative; margin-bottom: 12px; }
+  .field label { display: block; margin-bottom: 5px; font-size: 13px; font-weight: 600; }
+  .field input {
+    width: 100%; height: 42px; padding: 0 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .field input::placeholder { color: var(--muted); opacity: .8; }
+  .field input:hover { border-color: var(--muted); }
+  .field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .field.invalid input { border-color: var(--danger); }
+  .field.invalid input:focus { box-shadow: 0 0 0 3px var(--danger-soft); }
+  .field-error { margin: 6px 0 0; color: var(--danger); font-size: 13px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip {
+    padding: 3px 10px; font-size: 13px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  .suggestions {
+    position: absolute; z-index: 1200; left: 0; right: 0; top: calc(100% + 4px);
+    margin: 0; padding: 4px; list-style: none; max-height: 280px; overflow-y: auto;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .suggestions li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+  .suggestions li[aria-selected="true"], .suggestions li:hover { background: var(--accent-soft); }
+  .suggestions .state { color: var(--muted); font-size: 13px; }
+  .suggestions .empty { color: var(--muted); cursor: default; }
+  .suggestions .empty:hover { background: none; }
+
+  .actions { display: flex; gap: 8px; margin-top: 16px; }
+  .btn-primary {
+    flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 42px; padding: 0 16px; border: 0; border-radius: var(--radius);
+    background: var(--accent); color: var(--on-accent); font-weight: 600;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled { opacity: .65; cursor: progress; }
+  .btn-secondary {
+    height: 42px; padding: 0 14px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted);
+  }
+  .btn-secondary:hover { color: var(--text); background: var(--surface-2); }
+  .spinner { width: 15px; height: 15px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .assumptions { margin: 12px 0 0; color: var(--muted); font-size: 12.5px; }
+
+  /* ---- Results --------------------------------------------------------- */
+  .pad { padding: 16px 20px 24px; }
+  .placeholder { color: var(--muted); }
+  .placeholder h2 { margin: 0 0 6px; font-size: 15px; color: var(--text); }
+  .placeholder p { margin: 0 0 8px; }
+  .alert {
+    display: flex; gap: 10px; padding: 12px 14px; margin-bottom: 14px;
+    background: var(--danger-soft); border: 1px solid var(--danger-border); border-radius: var(--radius);
+  }
+  .alert strong { display: block; color: var(--danger); margin-bottom: 2px; }
+  .alert p { margin: 0; font-size: 14px; }
+
+  .trip { margin: 0 0 14px; font-size: 15px; font-weight: 600; }
+  .trip small { display: block; font-weight: 400; color: var(--muted); font-size: 13px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 14px; }
+  .stat { padding: 12px 14px; background: var(--surface-2); border-radius: var(--radius); }
+  .stat dt { color: var(--muted); font-size: 12.5px; }
+  .stat dd { margin: 2px 0 0; font-size: 19px; font-weight: 650; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+  .stat dd small { font-size: 12.5px; font-weight: 400; color: var(--muted); }
+  .stat.primary { background: var(--accent-soft); }
+  .stat.wide { grid-column: 1 / -1; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .stat.wide dd { margin: 0; font-size: 16px; }
+  .stat.primary dd { color: var(--accent); }
+  .note { margin: 0 0 14px; padding: 10px 12px; background: var(--surface-2); border-radius: var(--radius); color: var(--muted); font-size: 13.5px; }
+
+  .list-head { display: flex; align-items: center; justify-content: space-between; margin: 18px 0 8px; }
+  .list-head h2 { margin: 0; font-size: 13px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .link { padding: 0; background: none; border: 0; color: var(--accent); font-size: 13px; }
+  .link:hover { text-decoration: underline; }
+
+  .stops { list-style: none; margin: 0; padding: 0; }
+  .stop {
+    display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 12px; align-items: start;
+    width: calc(100% + 20px); padding: 12px 10px; margin: 0 -10px;
+    text-align: left; background: none; border: 0; border-top: 1px solid var(--border); border-radius: 0;
+  }
+  .stop:hover { background: var(--surface-2); }
+  .stop.active { background: var(--accent-soft); border-radius: var(--radius); border-top-color: transparent; }
+  li:has(.stop.active) + li .stop { border-top-color: transparent; }
+  .badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--accent); color: var(--on-accent); font-size: 12.5px; font-weight: 700;
+  }
+  .stop-name { display: block; font-weight: 600; overflow-wrap: anywhere; }
+  .stop-meta { display: block; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+  .stop-cost { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .stop-cost b { display: block; font-size: 15px; }
+  .stop-cost span { color: var(--muted); font-size: 12.5px; }
+
+  /* ---- Map ------------------------------------------------------------- */
+  .pin {
+    display: flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .35);
+    background: #1c5fd0; color: #fff; font: 700 12.5px/1 system-ui, sans-serif;
+  }
+  .pin.start { background: #17804d; }
+  .pin.finish { background: #b3261e; }
+  .leaflet-marker-icon:not(.leaflet-interactive) { pointer-events: none; }
+  .pin.active { transform: scale(1.25); box-shadow: 0 0 0 4px rgba(28, 95, 208, .3), 0 1px 4px rgba(0, 0, 0, .35); }
+  .leaflet-container { font: inherit; }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+  .leaflet-popup-content-wrapper { border-radius: var(--radius); }
+  .leaflet-popup-content { margin: 12px 14px; font-size: 13.5px; line-height: 1.45; }
+  .leaflet-popup-content strong { display: block; font-size: 14px; }
+  .leaflet-popup-content .muted { color: var(--muted); }
+  .leaflet-tooltip { padding: 8px 10px; background: var(--surface); color: var(--text); border: 1px solid var(--border);
+                     border-radius: var(--radius); box-shadow: var(--shadow); font-size: 13px; line-height: 1.4; }
+  .leaflet-tooltip strong { display: block; font-size: 13.5px; }
+  .leaflet-tooltip .muted { color: var(--muted); }
+  .leaflet-tooltip-top::before { border-top-color: var(--surface); }
+  .leaflet-bar a, .leaflet-bar a:hover { background: var(--surface); color: var(--text); border-bottom-color: var(--border); }
+  .leaflet-control-attribution { background: color-mix(in srgb, var(--surface) 85%, transparent) !important; color: var(--muted); }
+  .leaflet-control-attribution a { color: var(--accent); }
+  :root[data-theme="dark"] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.9) saturate(.7); }
+  .map-empty {
+    position: absolute; inset: 0; z-index: 500; display: flex; align-items: center; justify-content: center;
+    pointer-events: none; color: var(--muted); font-size: 14px; text-align: center; padding: 24px;
+  }
+  .map-empty span { padding: 8px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; box-shadow: var(--shadow); }
+
+  /* ---- Journey playback ------------------------------------------------ */
+  .player {
+    position: absolute; left: 12px; bottom: 28px; z-index: 800;
+    display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 6px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px; box-shadow: var(--shadow);
+  }
+  .play-btn {
+    display: inline-flex; align-items: center; justify-content: center; flex: none;
+    width: 40px; height: 40px; border: 0; border-radius: 50%; background: var(--accent); color: var(--on-accent);
+  }
+  .play-btn:hover { background: var(--accent-hover); }
+  .play-btn svg { width: 17px; height: 17px; }
+  .play-label { padding: 0 6px 0 2px; font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+  .speeds { display: flex; gap: 2px; padding-left: 6px; border-left: 1px solid var(--border); }
+  .ctrl {
+    height: 30px; padding: 0 10px; background: none; border: 1px solid transparent; border-radius: 999px;
+    color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums;
+  }
+  .ctrl:hover { color: var(--text); background: var(--surface-2); }
+  .ctrl[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+  .ctrl.outline { border-color: var(--border); }
+
+  .hud {
+    position: absolute; top: 12px; right: 12px; z-index: 800; width: 300px; padding: 14px 16px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+  }
+  .hud-phase {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+    color: var(--muted); font-size: 12px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase;
+  }
+  .hud-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+  .hud.running .hud-dot { animation: blink 1s ease-in-out infinite; }
+  .hud-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  .hud-row span { color: var(--muted); font-size: 13px; }
+  .hud-row b { font-size: 16px; font-variant-numeric: tabular-nums; }
+  .hud-fuel-row { flex-wrap: wrap; row-gap: 4px; }
+  .gauge { position: relative; flex-basis: 100%; height: 8px; overflow: hidden; background: var(--surface-2); border-radius: 999px; }
+  .gauge-reserve { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--text); opacity: .7; }
+  .gauge-legend { flex-basis: 100%; color: var(--muted); font-size: 11.5px; }
+  .gauge i { display: block; width: 100%; height: 100%; background: var(--start); border-radius: 999px; transition: background-color .3s; }
+  .gauge i.low { background: #c27c00; }
+  .gauge i.critical { background: var(--danger); }
+  .hud-caption {
+    margin: 10px 0 0; padding-top: 10px; min-height: 4.4em; border-top: 1px solid var(--border);
+    font-size: 13.5px; line-height: 1.45;
+  }
+  .hud-caption b { font-weight: 650; }
+
+  .truck {
+    display: flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+    background: #1c5fd0; border: 3px solid #fff; border-radius: 50%;
+    box-shadow: 0 0 0 7px rgba(28, 95, 208, .22), 0 2px 6px rgba(0, 0, 0, .35);
+  }
+  .truck svg { width: 16px; height: 16px; fill: #fff; }
+  .sweep { animation: blink .6s ease-in-out infinite; }
+  .pin.pop { animation: pop .45s cubic-bezier(.3, 1.6, .5, 1) both; }
+  .pin.pulse { animation: pulse 1s ease-out infinite; }
+  @keyframes blink { 50% { opacity: .3; } }
+  @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(28, 95, 208, .6), 0 1px 4px rgba(0, 0, 0, .35); }
+    100% { box-shadow: 0 0 0 18px rgba(28, 95, 208, 0), 0 1px 4px rgba(0, 0, 0, .35); }
+  }
+
+  /* ---- Small screens --------------------------------------------------- */
+  @media (max-width: 900px) {
+    .hud { left: 54px; right: 10px; top: 10px; width: auto; padding: 8px 10px; }
+    .hud-phase { margin-bottom: 6px; font-size: 11px; }
+    .hud-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .hud-row { display: block; margin: 0; }
+    .hud-row span { display: block; font-size: 11px; }
+    .hud-row b { font-size: 13.5px; white-space: nowrap; }
+    .gauge { height: 6px; margin-top: 4px; }
+    .gauge-legend { display: none; }
+    .hud-caption {
+      min-height: 0; margin-top: 6px; padding-top: 6px; font-size: 12.5px;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .workspace.playing { grid-template-rows: auto 70vh auto; }
+    .player { left: 50%; bottom: 24px; transform: translateX(-50%); }
+    .app { height: auto; min-height: 100dvh; }
+    .workspace {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto 52vh auto;
+      grid-template-areas: "search" "map" "results";
+    }
+    .search, .results { border-right: 0; }
+    .results { overflow: visible; }
+    .topbar { padding: 0 16px; }
+    .search { padding: 16px; }
+    .pad { padding: 16px 16px 28px; }
+    .brand span { display: none; }
+  }
+  @media (max-width: 380px) {
+    .stats { grid-template-columns: 1fr; }
+    .theme-label { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+</style>
+</head>
+<body>
+<div class="app" data-route-url="{% url 'route-plan' %}" data-suggest-url="{% url 'location-suggest' %}">
+  <header class="topbar">
+    <div class="brand">
+      <h1>Fuel Route Planner</h1>
+      <span>Cost-optimal fuel stops for US routes</span>
+    </div>
+    <button class="icon-btn" id="theme-toggle" type="button" aria-label="Switch colour theme">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <span class="theme-label" id="theme-label">Dark theme</span>
+    </button>
+  </header>
+
+  <main class="workspace">
+    <section class="search" aria-label="Plan a route">
+      <form id="route-form" novalidate autocomplete="off">
+        <div class="field" data-field="start">
+          <label for="start">Start</label>
+          <input id="start" name="start" type="text" placeholder="City and state, e.g. Chicago, IL"
+                 role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="start-list" spellcheck="false">
+          <ul class="suggestions" id="start-list" role="listbox" hidden></ul>
+        </div>
+        <div class="field" data-field="finish">
+          <label for="finish">Finish</label>
+          <input id="finish" name="finish" type="text" placeholder="City and state, e.g. Miami, FL"
+                 role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="finish-list" spellcheck="false">
+          <ul class="suggestions" id="finish-list" role="listbox" hidden></ul>
+        </div>
+        <div class="actions">
+          <button class="btn-primary" id="submit" type="submit">Plan route</button>
+          <button class="btn-secondary" id="swap" type="button" title="Swap start and finish">Swap</button>
+        </div>
+        <p class="assumptions">500-mile range, 10 miles per gallon, departing with a full tank.<br>
+          Stop cost ${{ rules.stop_cost }} · {{ rules.reserve_miles }}-mile reserve · minimum {{ rules.min_purchase }} gal</p>
+      </form>
+    </section>
+
+    <section class="map-wrap" aria-label="Route map">
+      <div id="map"></div>
+      <div class="map-empty" id="map-empty"><span>Your route and fuel stops will appear here</span></div>
+      <div class="hud" id="hud" hidden>
+        <div class="hud-phase"><span class="hud-dot"></span><span id="hud-phase" aria-live="polite">Ready</span></div>
+        <div class="hud-stats">
+          <div class="hud-row"><span>Distance</span><b id="hud-miles">0 mi</b></div>
+          <div class="hud-row hud-fuel-row">
+            <span>Fuel in tank</span><b id="hud-fuel">50.0 gal</b>
+            <div class="gauge" aria-hidden="true">
+              <i id="hud-gauge"></i><span class="gauge-reserve" id="hud-reserve"></span>
+            </div>
+            <small class="gauge-legend" id="hud-reserve-label"></small>
+          </div>
+          <div class="hud-row"><span>Spent on fuel</span><b id="hud-spent">$0.00</b></div>
+        </div>
+        <p class="hud-caption" id="hud-caption"></p>
+      </div>
+      <div class="player" id="player" hidden>
+        <button class="play-btn" id="play-btn" type="button" aria-label="Play the journey"></button>
+        <span class="play-label" id="play-label">Play journey</span>
+        <button class="ctrl outline" id="restart-btn" type="button" hidden>Restart</button>
+        <div class="speeds" role="group" aria-label="Playback speed">
+          <button class="ctrl" type="button" data-speed="1" aria-pressed="true">1×</button>
+          <button class="ctrl" type="button" data-speed="2" aria-pressed="false">2×</button>
+          <button class="ctrl" type="button" data-speed="4" aria-pressed="false">4×</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="results" aria-live="polite">
+      <div class="pad" id="results">
+        <div class="placeholder">
+          <h2>Plan a trip</h2>
+          <p>Enter a start and a finish in the USA. Start typing a city or a state and pick from the suggestions.</p>
+          <p>You will get the driving route, the cheapest places to refuel along it, and the total fuel cost.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+  "use strict";
+  var app = document.querySelector(".app");
+  var ROUTE_URL = app.dataset.routeUrl;
+  var SUGGEST_URL = app.dataset.suggestUrl;
+  var DEBOUNCE_MS = 250;
+
+  var form = document.getElementById("route-form");
+  var submitBtn = document.getElementById("submit");
+  var results = document.getElementById("results");
+  var mapEmpty = document.getElementById("map-empty");
+  var inputs = { start: document.getElementById("start"), finish: document.getElementById("finish") };
+
+  var usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+  var num = function (value, digits) {
+    return Number(value).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  };
+
+  /* Small DOM helper: el("div", {class: "x"}, "text", childNode, ...) */
+  function el(tag, attrs) {
+    var node = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (key) {
+      if (key === "class") node.className = attrs[key];
+      else if (key === "text") node.textContent = attrs[key];
+      else node.setAttribute(key, attrs[key]);
+    });
+    for (var i = 2; i < arguments.length; i++) {
+      var child = arguments[i];
+      if (child == null) continue;
+      node.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
+    }
+    return node;
+  }
+
+  /* ---- Theme ----------------------------------------------------------- */
+  var themeLabel = document.getElementById("theme-label");
+  function paintThemeLabel() {
+    themeLabel.textContent = document.documentElement.dataset.theme === "dark" ? "Light theme" : "Dark theme";
+  }
+  document.getElementById("theme-toggle").addEventListener("click", function () {
+    var next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("theme", next); } catch (e) {}
+    paintThemeLabel();
+  });
+  paintThemeLabel();
+
+  /* ---- Map ------------------------------------------------------------- */
+  var map = L.map("map", { zoomControl: true }).setView([39.5, -96.5], 4);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+  var layer = L.layerGroup().addTo(map);
+  var routeBounds = null;
+  var stopMarkers = [];   // index = stop position in the list
+
+  function pin(label, kind) {
+    return L.divIcon({
+      className: "", iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14],
+      html: '<div class="pin ' + (kind || "") + '">' + label + "</div>"
+    });
+  }
+  function popup(title, lines) {
+    var box = el("div", {}, el("strong", { text: title }));
+    lines.forEach(function (line, i) { box.appendChild(el("div", { class: i === 0 ? "muted" : "", text: line })); });
+    return box;
+  }
+  function fitRoute() {
+    if (routeBounds) map.flyToBounds(routeBounds, { padding: [32, 32], duration: .6 });
+  }
+
+  /* ---- Autocomplete with debounce --------------------------------------- */
+  function autocomplete(input) {
+    var list = document.getElementById(input.id + "-list");
+    var timer = null, controller = null, items = [], active = -1;
+
+    function close() {
+      // Cancel a pending or in-flight search too, or it reopens the list after Escape.
+      clearTimeout(timer);
+      if (controller) controller.abort();
+      list.hidden = true; list.textContent = ""; items = []; active = -1;
+      input.setAttribute("aria-expanded", "false");
+      input.removeAttribute("aria-activedescendant");
+    }
+    function highlight(index) {
+      active = index;
+      Array.prototype.forEach.call(list.children, function (li, i) {
+        li.setAttribute("aria-selected", i === index ? "true" : "false");
+        if (i === index) { input.setAttribute("aria-activedescendant", li.id); li.scrollIntoView({ block: "nearest" }); }
+      });
+    }
+    function choose(index) {
+      input.value = items[index].label;
+      close();
+      clearFieldError(input.name);
+    }
+    function render(found, query) {
+      list.textContent = ""; items = found; active = -1;
+      if (!found.length) {
+        list.appendChild(el("li", { class: "empty", text: 'No US city matches "' + query + '"' }));
+      }
+      found.forEach(function (place, i) {
+        var li = el("li", { role: "option", id: input.id + "-opt-" + i, "aria-selected": "false" },
+          el("span", { text: place.name }), el("span", { class: "state", text: place.state }));
+        // mousedown fires before the input loses focus, so the choice is not lost to blur.
+        li.addEventListener("mousedown", function (event) { event.preventDefault(); choose(i); });
+        list.appendChild(li);
+      });
+      list.hidden = false;
+      input.setAttribute("aria-expanded", "true");
+    }
+    function search() {
+      var query = input.value.trim();
+      if (controller) controller.abort();
+      if (query.length < 2) { close(); return; }
+      controller = new AbortController();
+      fetch(SUGGEST_URL + "?q=" + encodeURIComponent(query), { signal: controller.signal })
+        .then(function (resp) { return resp.ok ? resp.json() : { results: [] }; })
+        .then(function (body) {
+          if (document.activeElement === input && input.value.trim() === query) render(body.results || [], query);
+        })
+        .catch(function () { /* aborted or offline: suggestions are optional */ });
+    }
+
+    input.addEventListener("input", function () {
+      clearFieldError(input.name);
+      clearTimeout(timer);
+      timer = setTimeout(search, DEBOUNCE_MS);
+    });
+    input.addEventListener("keydown", function (event) {
+      // Escape also works before the list has appeared (while the search is still pending).
+      if (event.key === "Escape") { close(); return; }
+      if (list.hidden || !items.length) return;
+      if (event.key === "ArrowDown") { event.preventDefault(); highlight((active + 1) % items.length); }
+      else if (event.key === "ArrowUp") { event.preventDefault(); highlight((active - 1 + items.length) % items.length); }
+      else if (event.key === "Enter" && active >= 0) { event.preventDefault(); choose(active); }
+    });
+    input.addEventListener("blur", function () { clearTimeout(timer); setTimeout(close, 120); });
+    return { close: close };
+  }
+  var pickers = { start: autocomplete(inputs.start), finish: autocomplete(inputs.finish) };
+
+  /* ---- Errors ---------------------------------------------------------- */
+  function clearFieldError(name) {
+    var field = form.querySelector('[data-field="' + name + '"]');
+    field.classList.remove("invalid");
+    inputs[name].removeAttribute("aria-invalid");
+    Array.prototype.slice.call(field.querySelectorAll(".field-error, .chips")).forEach(function (n) { n.remove(); });
+  }
+  function showFieldError(name, message, suggestions) {
+    clearFieldError(name);
+    var field = form.querySelector('[data-field="' + name + '"]');
+    field.classList.add("invalid");
+    inputs[name].setAttribute("aria-invalid", "true");
+    field.appendChild(el("p", { class: "field-error", role: "alert", text: message }));
+    if (suggestions && suggestions.length) {
+      var chips = el("div", { class: "chips" });
+      suggestions.forEach(function (label) {
+        var chip = el("button", { type: "button", class: "chip", text: label });
+        chip.addEventListener("click", function () { inputs[name].value = label; clearFieldError(name); inputs[name].focus(); });
+        chips.appendChild(chip);
+      });
+      field.appendChild(chips);
+    }
+  }
+  var ERROR_TITLES = {
+    route_not_found: "No driving route",
+    no_feasible_fuel_plan: "No fuel plan possible",
+    routing_service_unavailable: "Routing service unavailable",
+    rate_limited: "Too many requests",
+    internal_error: "Something went wrong",
+    network: "Cannot reach the server"
+  };
+  function alertBox(code, message) {
+    return el("div", { class: "alert", role: "alert" },
+      el("div", {}, el("strong", { text: ERROR_TITLES[code] || "Could not plan this route" }), el("p", { text: message })));
+  }
+  function showAlert(code, message) {
+    results.textContent = "";
+    results.appendChild(alertBox(code, message));
+  }
+  function renderBlockedRoute(body, error) {
+    // The route exists but the price list cannot fuel it: show the trip, mark where the
+    // stations are missing, and explain why there is no plan. No stops or costs are shown.
+    mapEmpty.hidden = true;
+    var path = body.route.geometry.coordinates.map(function (c) { return [c[1], c[0]]; });
+    var line = L.polyline(path, { color: "#1c5fd0", weight: 5, opacity: .9 }).addTo(layer);
+    routeBounds = line.getBounds();
+    var gap = body.gap;
+    if (gap && gap.geometry.coordinates.length > 1) {
+      L.polyline(gap.geometry.coordinates.map(function (c) { return [c[1], c[0]]; }),
+                 { color: "#b3261e", weight: 7, opacity: .85, dashArray: "8 8" })
+        .bindTooltip(num(gap.miles, 0) + " miles with no station in the price list").addTo(layer);
+    }
+    (body.stations_on_route || []).forEach(function (st) {
+      L.circleMarker([st.latitude, st.longitude], { radius: 5, color: "#ffffff", weight: 1, fillColor: "#5c6878", fillOpacity: .9 })
+        .bindTooltip(popup(st.name, [st.city + ", " + st.state + " · mile " + num(st.mile_marker, 0),
+                                     "$" + num(st.price_per_gallon, 3) + " per gallon"])).addTo(layer);
+    });
+    L.marker([body.start.latitude, body.start.longitude], { icon: pin("A", "start"), zIndexOffset: 500 })
+      .bindPopup(popup("Start", [body.start.resolved])).addTo(layer);
+    L.marker([body.finish.latitude, body.finish.longitude], { icon: pin("B", "finish"), zIndexOffset: 500 })
+      .bindPopup(popup("Finish", [body.finish.resolved])).addTo(layer);
+    map.invalidateSize();
+    map.fitBounds(routeBounds, { padding: [32, 32] });
+
+    results.textContent = "";
+    results.appendChild(el("p", { class: "trip" },
+      body.start.resolved + " to " + body.finish.resolved,
+      el("small", { text: num(body.route.distance_miles, 1) + " miles, about " + duration(body.route.duration_hours) + " of driving" })));
+    results.appendChild(alertBox(error.code, error.message));
+    if (gap) {
+      results.appendChild(el("p", { class: "note", text:
+        "The red dashed line is the " + num(gap.miles, 0) + "-mile stretch (mile " + num(gap.from_mile, 0) + " to " +
+        num(gap.to_mile, 0) + ") with no station in the price list. The grey dots are the " +
+        (body.stations_on_route || []).length + " listed stations along the rest of the route." }));
+    }
+  }
+  function clearMap() {
+    player.unload();
+    layer.clearLayers(); stopMarkers = []; routeBounds = null;
+    map.closePopup();
+    mapEmpty.hidden = false;
+  }
+  function handleError(error, body) {
+    clearMap();   // never leave a previous route on screen next to an error
+    if (body && body.route) { renderBlockedRoute(body, error); return; }
+    var field = error.field;
+    if (field && inputs[field]) {
+      showFieldError(field, error.message, error.suggestions);
+      inputs[field].focus();
+      results.textContent = "";
+      results.appendChild(el("div", { class: "placeholder" },
+        el("h2", { text: "Check the " + field + " location" }),
+        el("p", { text: "Fix the highlighted field above, then plan the route again." })));
+      return;
+    }
+    if (error.fields) {   // both inputs missing
+      Object.keys(error.fields).forEach(function (name) {
+        if (inputs[name]) showFieldError(name, "Enter a " + name + " location.");
+      });
+      return;
+    }
+    showAlert(error.code, error.message);
+  }
+
+  /* ---- Rendering a plan ------------------------------------------------- */
+  function duration(hours) {
+    var h = Math.floor(hours), m = Math.round((hours - h) * 60);
+    return h + " h " + m + " min";
+  }
+  function setActive(index) {
+    Array.prototype.forEach.call(results.querySelectorAll(".stop"), function (btn, i) {
+      btn.classList.toggle("active", i === index);
+      if (i === index) btn.setAttribute("aria-current", "true"); else btn.removeAttribute("aria-current");
+    });
+    stopMarkers.forEach(function (marker, i) {
+      var node = marker.getElement();
+      if (node) node.firstChild.classList.toggle("active", i === index);
+    });
+  }
+  function focusStop(index, fromList) {
+    player.stop();   // a click on the list takes the map back from the playback
+    var marker = stopMarkers[index];
+    if (!marker) return;
+    setActive(index);
+    map.flyTo(marker.getLatLng(), Math.max(map.getZoom(), 10), { duration: .7 });
+    marker.openPopup();
+    if (fromList && window.matchMedia("(max-width: 900px)").matches) {
+      document.querySelector(".map-wrap").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function renderPlan(plan) {
+    var s = plan.summary, stops = plan.fuel_stops;
+    layer.clearLayers(); stopMarkers = [];
+    mapEmpty.hidden = true;
+
+    var path = plan.route.geometry.coordinates.map(function (c) { return [c[1], c[0]]; });
+    var line = L.polyline(path, { color: "#1c5fd0", weight: 5, opacity: .9 }).addTo(layer);
+    routeBounds = line.getBounds();
+    L.marker([plan.start.latitude, plan.start.longitude], { icon: pin("A", "start"), zIndexOffset: 500 })
+      .bindPopup(popup("Start", [plan.start.resolved])).addTo(layer);
+    L.marker([plan.finish.latitude, plan.finish.longitude], { icon: pin("B", "finish"), zIndexOffset: 500 })
+      .bindPopup(popup("Finish", [plan.finish.resolved])).addTo(layer);
+    stops.forEach(function (stop, i) {
+      var marker = L.marker([stop.latitude, stop.longitude], { icon: pin(stop.sequence, ""), zIndexOffset: 1000 })
+        .bindPopup(popup(stop.name, [
+          stop.address + ", " + stop.city + ", " + stop.state,
+          num(stop.gallons_purchased, 1) + " gal at $" + num(stop.price_per_gallon, 3) + " = " + usd.format(stop.cost)
+        ])).addTo(layer);
+      marker.on("click", function () {
+        setActive(i);
+        var item = results.querySelectorAll(".stop")[i];
+        if (item) item.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      });
+      stopMarkers.push(marker);
+    });
+    map.invalidateSize();
+    map.fitBounds(routeBounds, { padding: [32, 32] });
+    player.load(plan);
+
+    results.textContent = "";
+    results.appendChild(el("p", { class: "trip" },
+      plan.start.resolved + " to " + plan.finish.resolved,
+      el("small", { text: num(s.total_distance_miles, 1) + " miles, about " + duration(plan.route.duration_hours) + " of driving" })));
+
+    function wideStat(label, value) {
+      return el("div", { class: "stat wide" }, el("dt", { text: label }), el("dd", { text: value }));
+    }
+    function stat(label, value, hint, primary) {
+      return el("div", { class: "stat" + (primary ? " primary" : "") },
+        el("dt", { text: label }), el("dd", {}, value, hint ? el("small", { text: " " + hint }) : null));
+    }
+    results.appendChild(el("dl", { class: "stats" },
+      stat("Total fuel cost", usd.format(s.total_fuel_cost), "", true),
+      stat("Fuel stops", String(s.number_of_stops)),
+      stat("Fuel used", num(s.fuel_consumed_gallons, 1), "gal"),
+      stat("Fuel bought", num(s.fuel_purchased_gallons, 1), "gal"),
+      wideStat("Fuel left at destination", num(s.fuel_left_at_finish_gallons, 1) + " gal")));
+
+    (plan.notes || []).forEach(function (note) { results.appendChild(el("p", { class: "note", text: note })); });
+
+    if (stops.length) {
+      var reset = el("button", { type: "button", class: "link", text: "Show whole route" });
+      reset.addEventListener("click", function () { setActive(-1); map.closePopup(); fitRoute(); });
+      results.appendChild(el("div", { class: "list-head" }, el("h2", { text: "Fuel stops" }), reset));
+      var list = el("ol", { class: "stops" });
+      stops.forEach(function (stop, i) {
+        var button = el("button", { type: "button", class: "stop", "aria-label": "Show stop " + stop.sequence + ", " + stop.name + ", on the map" },
+          el("span", { class: "badge", text: String(stop.sequence) }),
+          el("span", {},
+            el("span", { class: "stop-name", text: stop.name }),
+            el("span", { class: "stop-meta", text: stop.address + ", " + stop.city + ", " + stop.state }),
+            el("span", { class: "stop-meta", text: "Mile " + num(stop.mile_marker, 0) + " · arrive with " + num(stop.fuel_on_arrival_gallons, 1) + " gal, leave with " + num(stop.fuel_after_fill_gallons, 1) + " gal" })),
+          el("span", { class: "stop-cost" },
+            el("b", { text: usd.format(stop.cost) }),
+            el("span", { text: num(stop.gallons_purchased, 1) + " gal × $" + num(stop.price_per_gallon, 3) })));
+        button.addEventListener("click", function () { focusStop(i, true); });
+        list.appendChild(el("li", {}, button));
+      });
+      results.appendChild(list);
+    }
+  }
+
+  /* ---- Journey playback --------------------------------------------------
+     A replay of the plan the API returned, with its real numbers. The optimiser
+     itself finishes in milliseconds; this shows its result one step at a time. */
+  var player = (function () {
+    var ui = {
+      box: document.getElementById("player"),
+      play: document.getElementById("play-btn"),
+      label: document.getElementById("play-label"),
+      restart: document.getElementById("restart-btn"),
+      speeds: Array.prototype.slice.call(document.querySelectorAll("[data-speed]")),
+      hud: document.getElementById("hud"),
+      phase: document.getElementById("hud-phase"),
+      miles: document.getElementById("hud-miles"),
+      fuel: document.getElementById("hud-fuel"),
+      gauge: document.getElementById("hud-gauge"),
+      reserve: document.getElementById("hud-reserve"),
+      reserveLabel: document.getElementById("hud-reserve-label"),
+      spent: document.getElementById("hud-spent"),
+      caption: document.getElementById("hud-caption")
+    };
+    var ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>';
+    var ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4h4.5v16H6zM13.5 4H18v16h-4.5z"/></svg>';
+    var DRIVE_MS = 22000;          // whole drive at 1x, shared out by leg length
+    var COLORS = { route: "#1c5fd0", reach: "#17804d", cheaper: "#17804d", dearer: "#5c6878", dim: "#8a96a6" };
+    var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    var plan = null, pts = [], cum = [], total = 0, tank = 50, mpg = 10, reserveGallons = 0, finishGallons = 0;
+    var playLayer = L.layerGroup();
+    var phases = [], phaseIdx = -1, phaseT = 0, speed = 1;
+    var running = false, paused = false, finished = false, follow = true, rafId = null, lastTs = null;
+    var faded, driven, reach, sweep, truck, dots = [], revealed = 0, win = [-1, -1], spentBefore = 0;
+
+    /* -- text and HUD helpers -- */
+    function setText(node, text) { if (node.textContent !== text) node.textContent = text; }
+    function setCaption(parts) {
+      // parts: array of strings; odd positions are bold. Rebuilt only when the text changes.
+      var key = parts.join("\u0001");
+      if (ui.caption.dataset.key === key) return;
+      ui.caption.dataset.key = key;
+      ui.caption.textContent = "";
+      parts.forEach(function (part, i) { ui.caption.appendChild(i % 2 ? el("b", { text: part }) : document.createTextNode(part)); });
+    }
+    function setPhase(text) { setText(ui.phase, text); }
+    function showHud(mile, fuel, spent) {
+      setText(ui.miles, num(mile, 0) + " / " + num(total, 0) + " mi");
+      setText(ui.fuel, num(fuel, 1) + " / " + num(tank, 0) + " gal");
+      var share = Math.max(0, Math.min(1, fuel / tank));
+      ui.gauge.style.width = (share * 100).toFixed(1) + "%";
+      // Red below the safety reserve, amber below a quarter tank.
+      // Red only below what the plan must still have at the destination, amber below a
+      // quarter tank. The stop reserve is shown as the marked line.
+      ui.gauge.className = fuel < finishGallons - 0.05 ? "critical" : share < 0.25 ? "low" : "";
+      setText(ui.spent, usd.format(spent));
+    }
+    function setControls() {
+      ui.play.innerHTML = running && !paused ? ICON_PAUSE : ICON_PLAY;
+      ui.play.setAttribute("aria-label", running && !paused ? "Pause the journey" : "Play the journey");
+      setText(ui.label, running ? (paused ? "Resume" : "Pause") : finished ? "Replay journey" : "Play journey");
+      ui.restart.hidden = !running;
+      ui.hud.classList.toggle("running", running && !paused);
+    }
+
+    /* -- route geometry: mile marker <-> map position -- */
+    function hav(a, b) {
+      var r = Math.PI / 180, dLat = (b[0] - a[0]) * r, dLon = (b[1] - a[1]) * r;
+      var h = Math.pow(Math.sin(dLat / 2), 2) + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.pow(Math.sin(dLon / 2), 2);
+      return 7917.5 * Math.asin(Math.sqrt(h));
+    }
+    function indexRoute() {
+      pts = plan.route.geometry.coordinates.map(function (c) { return [c[1], c[0]]; });
+      total = plan.route.distance_miles;
+      var raw = [0];
+      for (var i = 1; i < pts.length; i++) raw.push(raw[i - 1] + hav(pts[i - 1], pts[i]));
+      var scale = raw[raw.length - 1] > 0 ? total / raw[raw.length - 1] : 1;
+      cum = raw.map(function (m) { return m * scale; });   // aligned with the API's mile markers
+    }
+    function locate(mile) {
+      var last = pts.length - 1;
+      if (mile <= 0) return { i: 0, ll: pts[0] };
+      if (mile >= total) return { i: last, ll: pts[last] };
+      var lo = 0, hi = last;
+      while (hi - lo > 1) { var mid = (lo + hi) >> 1; if (cum[mid] <= mile) lo = mid; else hi = mid; }
+      var span = cum[lo + 1] - cum[lo] || 1, t = (mile - cum[lo]) / span;
+      return { i: lo, ll: [pts[lo][0] + (pts[lo + 1][0] - pts[lo][0]) * t, pts[lo][1] + (pts[lo + 1][1] - pts[lo][1]) * t] };
+    }
+    function slice(fromMile, toMile) {
+      var a = locate(fromMile), b = locate(toMile), out = [a.ll];
+      for (var k = a.i + 1; k <= b.i; k++) out.push(pts[k]);
+      out.push(b.ll);
+      return out;
+    }
+    function bearing(a, b) {
+      var r = Math.PI / 180, y = Math.sin((b[1] - a[1]) * r) * Math.cos(b[0] * r);
+      var x = Math.cos(a[0] * r) * Math.sin(b[0] * r) - Math.sin(a[0] * r) * Math.cos(b[0] * r) * Math.cos((b[1] - a[1]) * r);
+      return Math.atan2(y, x) / r;
+    }
+    function keepInView(latlng) {
+      // Centre the truck in the visible part of the map: below the panel when it spans the
+      // map (small screens) and above the playback controls.
+      var size = map.getSize();
+      var top = ui.hud.offsetWidth > size.x * 0.6 ? ui.hud.offsetTop + ui.hud.offsetHeight : 0;
+      var bottom = size.y - (ui.box.offsetHeight + 28);
+      var shift = size.y / 2 - (top + Math.max(bottom, top + 40)) / 2;
+      var target = map.project(latlng).add([0, shift]);
+      map.panTo(map.unproject(target), { animate: false });
+    }
+    var TIP_OPTIONS = { direction: "top", offset: [0, -6] };
+    function stationTip(s, extra) {
+      var box = el("div", {},
+        el("strong", { text: s.name }),
+        el("div", { class: "muted", text: s.city + ", " + s.state + " · mile " + num(s.mile_marker, 0) }),
+        el("div", { text: "$" + num(s.price_per_gallon, 3) + " per gallon" }));
+      if (extra) box.appendChild(el("div", { text: extra }));
+      return box;
+    }
+    function ease(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+    function clamp01(t) { return Math.max(0, Math.min(1, t)); }
+
+    /* -- station dots and the "within reach" window -- */
+    var STYLE_HIDDEN = { radius: 5, opacity: 0, fillOpacity: 0 };
+    var STYLE_FOUND = { radius: 5, color: "#ffffff", weight: 1, fillColor: COLORS.dearer, opacity: 0.9, fillOpacity: 0.9 };
+    var STYLE_DIM = { radius: 4.5, color: "#ffffff", weight: 1, fillColor: COLORS.dim, opacity: 0.35, fillOpacity: 0.35 };
+    function setWindow(fromMile, toMile, refPrice) {
+      var stations = plan.stations_on_route, lo = 0, hi = -1;
+      while (lo < stations.length && stations[lo].mile_marker <= fromMile) lo++;
+      hi = lo - 1;
+      while (hi + 1 < stations.length && stations[hi + 1].mile_marker <= toMile) hi++;
+      if (lo === win[0] && hi === win[1]) return hi - lo + 1;
+      win = [lo, hi];
+      dots.forEach(function (dot, i) {
+        if (i >= lo && i <= hi) {
+          var cheaper = stations[i].price_per_gallon <= refPrice;
+          dot.setStyle({ radius: 5.5, color: "#ffffff", weight: 1.5, opacity: 1, fillOpacity: 1,
+                         fillColor: cheaper ? COLORS.cheaper : COLORS.dearer });
+        } else {
+          dot.setStyle(STYLE_DIM);
+        }
+      });
+      return hi - lo + 1;
+    }
+
+    /* -- the script: one entry per phase, timed at 1x speed -- */
+    function legs() {
+      var out = [], prev = 0, fuel = tank;
+      plan.fuel_stops.forEach(function (stop, i) {
+        out.push({ from: prev, to: stop.mile_marker, fuelStart: fuel, stop: stop, index: i });
+        prev = stop.mile_marker; fuel = stop.fuel_after_fill_gallons;
+      });
+      out.push({ from: prev, to: total, fuelStart: fuel, stop: null, index: -1 });
+      return out;
+    }
+    function decisionText(stop) {
+      var d = stop.decision || {}, place = stop.city + ", " + stop.state, price = "$" + num(stop.price_per_gallon, 3);
+      var gal = num(stop.gallons_purchased, 1) + " gal";
+      if (d.action === "just_enough" && d.next_stop) {
+        return [place + " at " + price + ". Fuel is cheaper at the next stop, " + d.next_stop.city + ", " + d.next_stop.state +
+                " ($" + num(d.next_stop.price_per_gallon, 3) + ", " + num(d.next_stop.mile_marker - stop.mile_marker, 0) +
+                " mi ahead), so buy just enough to get there with the reserve left: ", gal, "."];
+      }
+      if (d.action === "fill_up" && d.next_stop) {
+        return [place + " at " + price + " is cheaper than the next stop ($" + num(d.next_stop.price_per_gallon, 3) +
+                "), so fill the tank: ", gal, "."];
+      }
+      return [place + " at " + price + ". Last stop: buy what's needed to reach " + plan.finish.resolved + ": ", gal, "."];
+    }
+
+    function build() {
+      var stops = plan.fuel_stops, stations = plan.stations_on_route, legList = legs();
+      var totalCost = plan.summary.total_fuel_cost;
+      phases = [];
+
+      // 1. Scan the route for stations.
+      phases.push({
+        dur: 3200,
+        enter: function () {
+          setPhase("Scanning the route");
+          faded = L.polyline([], { color: COLORS.route, weight: 4, opacity: 0.3, interactive: false }).addTo(playLayer);
+          sweep = L.circleMarker(pts[0], { radius: 8, color: "#ffffff", weight: 2, fillColor: COLORS.route, fillOpacity: 1, className: "sweep", interactive: false }).addTo(playLayer);
+          L.marker(pts[0], { icon: pin("A", "start"), zIndexOffset: 500, interactive: false }).addTo(playLayer);
+          showHud(0, tank, 0);
+        },
+        update: function (t) {
+          var mile = total * ease(t);
+          faded.setLatLngs(slice(0, mile));
+          sweep.setLatLng(locate(mile).ll);
+          while (revealed < stations.length && stations[revealed].mile_marker <= mile) dots[revealed++].setStyle(STYLE_FOUND);
+          setCaption(["Searching ", num(total, 0) + " miles", " of road for fuel stations… ", String(revealed), " found so far."]);
+        },
+        exit: function () {
+          playLayer.removeLayer(sweep);
+          L.marker(pts[pts.length - 1], { icon: pin("B", "finish"), zIndexOffset: 500, interactive: false }).addTo(playLayer);
+          setCaption(stations.length
+            ? [String(stations.length), " stations found along the route."]
+            : ["No fuel stop needed: a full tank covers all ", num(total, 0) + " miles", "."]);
+        }
+      });
+
+      // 2. Choose the best stops.
+      phases.push({
+        dur: stops.length ? 900 + 450 * stops.length : 1200,
+        shown: 0,
+        enter: function () {
+          setPhase(stops.length ? "Choosing the best stops" : "No stop needed");
+          if (stops.length) setCaption(["Comparing ", String(stations.length) + " stations", " on price and range…"]);
+          dots.forEach(function (dot) { dot.setStyle(STYLE_DIM); });
+        },
+        update: function (t) {
+          // After a short pause, one pin pops in every 450 ms.
+          var elapsed = t * this.dur;
+          var due = stops.length ? Math.min(stops.length, Math.max(0, Math.floor((elapsed - 450) / 450) + 1)) : 0;
+          while (this.shown < due) {
+            var s = stops[this.shown++];
+            L.marker([s.latitude, s.longitude], { icon: pin(s.sequence, "pop"), zIndexOffset: 1000 })
+              .bindTooltip(stationTip(s, "Stop " + s.sequence + ": " + num(s.gallons_purchased, 1) + " gal = " + usd.format(s.cost)), TIP_OPTIONS)
+              .addTo(playLayer);
+          }
+        },
+        exit: function () {
+          if (stops.length) setCaption(["Best plan: ", stops.length + (stops.length === 1 ? " stop" : " stops"), ", ", usd.format(totalCost), " in total."]);
+        }
+      });
+
+      // 3. Zoom in to the start and put the truck on the road.
+      phases.push({
+        dur: 1400,
+        enter: function () {
+          setPhase("Starting the trip");
+          follow = true;
+          var zoom = Math.max(7, Math.min(map.getZoom() + 2, 8));
+          map.flyTo(pts[0], zoom, { duration: 1.3 / speed });
+          driven = L.polyline([pts[0]], { color: COLORS.route, weight: 5, opacity: 0.95, interactive: false }).addTo(playLayer);
+          reach = L.polyline([], { color: COLORS.reach, weight: 14, opacity: 0.22, lineCap: "round", interactive: false }).addTo(playLayer);
+          truck = L.marker(pts[0], {
+            zIndexOffset: 2000, interactive: false,
+            icon: L.divIcon({ className: "", iconSize: [34, 34], iconAnchor: [17, 17],
+                              html: '<div class="truck"><svg viewBox="0 0 24 24"><path d="M12 2.5l7.5 18-7.5-4.2-7.5 4.2z"/></svg></div>' })
+          }).addTo(playLayer);
+          setCaption(["Leaving ", plan.start.resolved, " with a full tank: ", num(tank, 0) + " gal", ", enough for " + num(tank * mpg, 0) + " miles."]);
+        }
+      });
+
+      // 4. Drive each leg, then refuel.
+      spentBefore = 0;
+      legList.forEach(function (leg) {
+        var miles = leg.to - leg.from;
+        phases.push({
+          dur: Math.max(1200, DRIVE_MS * miles / Math.max(total, 1)),
+          enter: function () {
+            setPhase(leg.stop ? "Driving to stop " + leg.stop.sequence + " of " + stops.length : "Final stretch");
+          },
+          update: function (t) {
+            var mile = leg.from + miles * ease(t);
+            var fuel = leg.fuelStart - (mile - leg.from) / mpg;
+            var here = locate(mile).ll, ahead = locate(Math.min(total, mile + 0.5)).ll;
+            truck.setLatLng(here);
+            var node = truck.getElement();
+            if (node && (ahead[0] !== here[0] || ahead[1] !== here[1])) {
+              node.firstChild.firstChild.style.transform = "rotate(" + bearing(here, ahead).toFixed(1) + "deg)";
+            }
+            driven.setLatLngs(slice(0, mile));
+            var reachEnd = Math.min(total, mile + fuel * mpg);
+            reach.setLatLngs(slice(mile, reachEnd));
+            var inReach = setWindow(mile, reachEnd, leg.stop ? leg.stop.price_per_gallon : Infinity);
+            if (follow) keepInView(here);
+            showHud(mile, fuel, spentBefore);
+            if (leg.stop && t >= 0.62) {
+              setCaption(decisionText(leg.stop));
+            } else if (leg.stop) {
+              setCaption(["Next stop ", leg.stop.city + ", " + leg.stop.state, " in " + num(leg.to - mile, 0) + " mi. ",
+                          String(inReach), " stations within reach on " + num(fuel, 1) + " gal."]);
+            } else {
+              setCaption(["Heading to ", plan.finish.resolved, ": " + num(total - mile, 0) + " mi to go on " + num(fuel, 1) + " gal."]);
+            }
+          }
+        });
+
+        if (!leg.stop) return;
+        var stop = leg.stop;
+        phases.push({
+          dur: 1900,
+          enter: function () {
+            setPhase("Fuel stop " + stop.sequence + " of " + stops.length);
+            setCaption(decisionText(stop));
+            setActive(leg.index);
+            var row = results.querySelectorAll(".stop")[leg.index];
+            if (row && !window.matchMedia("(max-width: 900px)").matches) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+            playLayer.eachLayer(function (lyr) {
+              var node = lyr.getElement && lyr.getElement();
+              if (node && node.firstChild && node.firstChild.textContent === String(stop.sequence) && node.firstChild.classList.contains("pin")) {
+                node.firstChild.classList.remove("pop"); node.firstChild.classList.add("pulse");
+              }
+            });
+          },
+          update: function (t) {
+            var u = ease(clamp01((t - 0.15) / 0.6));
+            showHud(stop.mile_marker, stop.fuel_on_arrival_gallons + stop.gallons_purchased * u, spentBefore + stop.cost * u);
+          },
+          exit: function () {
+            spentBefore = stop.sequence === stops.length ? totalCost : spentBefore + stop.cost;
+            playLayer.eachLayer(function (lyr) {
+              var node = lyr.getElement && lyr.getElement();
+              if (node && node.firstChild && node.firstChild.classList) node.firstChild.classList.remove("pulse");
+            });
+          }
+        });
+      });
+
+      // 5. Arrive.
+      var last = legList[legList.length - 1], fuelEnd = last.fuelStart - (total - last.from) / mpg;
+      phases.push({
+        dur: 1800,
+        enter: function () {
+          setPhase("Arrived");
+          setActive(-1);
+          map.removeLayer(reach);
+          map.flyToBounds(L.latLngBounds(pts), { padding: [40, 40], duration: 1.2 / speed });
+          showHud(total, fuelEnd, totalCost);
+          setCaption(["Arrived at ", plan.finish.resolved, " with " + num(fuelEnd, 1) + " gal left. ",
+                      stops.length + (stops.length === 1 ? " stop" : " stops"), ", " + num(plan.summary.fuel_purchased_gallons, 1) +
+                      " gal bought, ", usd.format(totalCost), " spent on fuel."]);
+        }
+      });
+    }
+
+    /* -- the clock: phases advance on a virtual time line, so pause and speed are exact -- */
+    function nextPhase() {
+      phaseIdx++; phaseT = 0;
+      if (phaseIdx >= phases.length) { complete(); return; }
+      var ph = phases[phaseIdx];
+      if (ph.enter) ph.enter.call(ph);
+    }
+    function frame(ts) {
+      if (!running) return;
+      if (lastTs === null) lastTs = ts;
+      var dt = Math.min(64, ts - lastTs); lastTs = ts;   // cap so a hidden tab doesn't jump ahead
+      if (!paused && phaseIdx < phases.length) {
+        var ph = phases[phaseIdx];
+        phaseT += dt * speed / ph.dur;
+        if (phaseT >= 1) {
+          if (ph.update) ph.update.call(ph, 1);
+          if (ph.exit) ph.exit.call(ph);
+          nextPhase();
+        } else if (ph.update) {
+          ph.update.call(ph, phaseT);
+        }
+      }
+      if (running) rafId = requestAnimationFrame(frame);
+    }
+
+    function teardown() {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = null; lastTs = null; running = false; paused = false;
+      playLayer.clearLayers();
+      if (map.hasLayer(playLayer)) map.removeLayer(playLayer);
+      if (!map.hasLayer(layer)) layer.addTo(map);
+      dots = []; revealed = 0; win = [-1, -1];
+    }
+    function setPlaying(on) {
+      var ws = document.querySelector(".workspace");
+      if (ws.classList.contains("playing") === on) return;
+      ws.classList.toggle("playing", on);
+      map.invalidateSize();
+    }
+    function complete() {
+      teardown();
+      setPlaying(false);
+      if (routeBounds) map.fitBounds(routeBounds, { padding: [32, 32] });
+      finished = true;
+      setControls();
+    }
+    function start() {
+      teardown();
+      finished = false;
+      map.closePopup();
+      setActive(-1);
+      map.removeLayer(layer);
+      playLayer.addTo(map);
+      dots = plan.stations_on_route.map(function (s) {
+        return L.circleMarker([s.latitude, s.longitude], STYLE_HIDDEN)
+          .bindTooltip(stationTip(s), TIP_OPTIONS).addTo(playLayer);
+      });
+      build();
+      ui.hud.hidden = false;
+      setPlaying(true);
+      running = true; paused = false; phaseIdx = -1;
+      nextPhase();
+      setControls();
+      rafId = requestAnimationFrame(frame);
+    }
+    function showSummaryOnly() {
+      // Reduced motion: no animation, just the end state.
+      var s = plan.summary, stops = plan.fuel_stops, last = legs().pop();
+      ui.hud.hidden = false;
+      setPhase("Journey summary");
+      showHud(total, last.fuelStart - (total - last.from) / mpg, s.total_fuel_cost);
+      setCaption([String(stops.length), stops.length === 1 ? " stop" : " stops", ", " + num(s.fuel_purchased_gallons, 1) + " gal bought, ",
+                  usd.format(s.total_fuel_cost), " spent on fuel."]);
+      finished = true; setControls();
+    }
+
+    ui.play.addEventListener("click", function () {
+      if (!plan) return;
+      if (running) { paused = !paused; lastTs = null; setControls(); return; }
+      if (reduceMotion.matches) { showSummaryOnly(); return; }
+      start();
+    });
+    ui.restart.addEventListener("click", function () { if (plan) start(); });
+    ui.speeds.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        speed = Number(btn.dataset.speed);
+        ui.speeds.forEach(function (b) { b.setAttribute("aria-pressed", b === btn ? "true" : "false"); });
+      });
+    });
+    map.on("dragstart", function () { follow = false; });   // the user took the camera
+
+    return {
+      get running() { return running; },
+      load: function (newPlan) {
+        teardown();
+        plan = newPlan; finished = false;
+        tank = plan.vehicle.max_range_miles / plan.vehicle.miles_per_gallon;
+        reserveGallons = plan.vehicle.reserve_gallons || 0;
+        finishGallons = (plan.summary.finish_reserve_miles || 0) / plan.vehicle.miles_per_gallon;
+        ui.reserve.hidden = !reserveGallons;
+        ui.reserve.style.left = (100 * reserveGallons / tank).toFixed(1) + "%";
+        ui.reserveLabel.textContent = reserveGallons ? "Marked line: " + num(reserveGallons, 1) + " gal reserve at fuel stops" : "";
+        mpg = plan.vehicle.miles_per_gallon;
+        indexRoute();
+        ui.hud.hidden = true;
+        ui.box.hidden = false;
+        setControls();
+      },
+      stop: function () {
+        if (!running) return;
+        teardown(); setPlaying(false); finished = false; ui.hud.hidden = true; setControls();
+      },
+      unload: function () {
+        teardown(); setPlaying(false); plan = null; ui.box.hidden = true; ui.hud.hidden = true;
+      }
+    };
+  })();
+
+  /* ---- Submitting ------------------------------------------------------- */
+  var inFlight = null;
+  function setLoading(on) {
+    submitBtn.disabled = on;
+    submitBtn.textContent = "";
+    if (on) { submitBtn.appendChild(el("span", { class: "spinner", "aria-hidden": "true" })); submitBtn.appendChild(document.createTextNode("Planning route")); }
+    else submitBtn.textContent = "Plan route";
+  }
+  function plan(start, finish, pushUrl) {
+    ["start", "finish"].forEach(clearFieldError);
+    pickers.start.close(); pickers.finish.close();
+    if (!start || !finish) {
+      if (!start) showFieldError("start", "Enter a start location.");
+      if (!finish) showFieldError("finish", "Enter a finish location.");
+      inputs[!start ? "start" : "finish"].focus();
+      return;
+    }
+    if (inFlight) inFlight.abort();
+    inFlight = new AbortController();
+    setLoading(true);
+    var query = "?start=" + encodeURIComponent(start) + "&finish=" + encodeURIComponent(finish);
+    // Rule overrides in the page URL (e.g. from the API's map_url) are passed through.
+    var current = new URLSearchParams(window.location.search);
+    ["stop_cost", "reserve_miles", "min_purchase_gallons"].forEach(function (key) {
+      if (current.has(key)) query += "&" + key + "=" + encodeURIComponent(current.get(key));
+    });
+    fetch(ROUTE_URL + query, { signal: inFlight.signal, headers: { Accept: "application/json" } })
+      .then(function (resp) {
+        return resp.json().then(
+          function (body) { return { ok: resp.ok, body: body }; },
+          function () { return { ok: false, body: { error: { code: "internal_error", message: "The server returned an unexpected response (HTTP " + resp.status + ")." } } }; });
+      })
+      .then(function (res) {
+        setLoading(false);
+        if (res.ok) {
+          inputs.start.value = res.body.start.resolved.indexOf("near") === -1 ? res.body.start.resolved : start;
+          inputs.finish.value = res.body.finish.resolved.indexOf("near") === -1 ? res.body.finish.resolved : finish;
+          renderPlan(res.body);
+          if (pushUrl) history.pushState({ start: start, finish: finish }, "", window.location.pathname + query);
+        } else {
+          handleError(res.body.error || { code: "internal_error", message: "Something went wrong. Please try again." }, res.body);
+        }
+      })
+      .catch(function (err) {
+        if (err.name === "AbortError") return;
+        setLoading(false);
+        clearMap();
+        showAlert("network", "Check your connection and that the server is running, then try again.");
+      });
+  }
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    plan(inputs.start.value.trim(), inputs.finish.value.trim(), true);
+  });
+  document.getElementById("swap").addEventListener("click", function () {
+    var tmp = inputs.start.value; inputs.start.value = inputs.finish.value; inputs.finish.value = tmp;
+    ["start", "finish"].forEach(clearFieldError);
+  });
+
+  function fromUrl() {
+    var params = new URLSearchParams(window.location.search);
+    var start = (params.get("start") || "").trim(), finish = (params.get("finish") || "").trim();
+    inputs.start.value = start; inputs.finish.value = finish;
+    if (start && finish) plan(start, finish, false);
+  }
+  window.addEventListener("popstate", fromUrl);
+  window.addEventListener("resize", function () { map.invalidateSize(); });
+  fromUrl();
+})();
+</script>
+</body>
+</html>

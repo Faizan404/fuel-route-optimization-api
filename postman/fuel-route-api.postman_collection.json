@@ -1,0 +1,814 @@
+{
+  "info": {
+    "name": "Fuel Route Optimization API",
+    "description": "Driving route between two US locations with cost-optimal fuel stops (500-mile range, 10 MPG). Set the base_url collection variable to where the Django server runs.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "Route plan",
+      "item": [
+        {
+          "name": "Long route with fuel stops (Chicago to Miami)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/route/?start=Chicago, IL&finish=Miami, FL",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "route",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "start",
+                  "value": "Chicago, IL"
+                },
+                {
+                  "key": "finish",
+                  "value": "Miami, FL"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns route distance and map geometry', () => {",
+                  "  pm.expect(body.route.distance_miles).to.be.above(1200).and.below(1500);",
+                  "  pm.expect(body.route.geometry.type).to.eql('LineString');",
+                  "  pm.expect(body.route.geometry.coordinates.length).to.be.above(100);",
+                  "  pm.expect(body.map_url).to.include('/api/v1/route/map/');",
+                  "});",
+                  "pm.test('has fuel stops with prices', () => {",
+                  "  pm.expect(body.fuel_stops.length).to.be.at.least(2);",
+                  "  body.fuel_stops.forEach(s => {",
+                  "    pm.expect(s.price_per_gallon).to.be.above(0);",
+                  "    pm.expect(s.name).to.be.a('string').and.not.empty;",
+                  "  });",
+                  "});",
+                  "pm.test('no leg exceeds the 500-mile range', () => {",
+                  "  const marks = [0].concat(body.fuel_stops.map(s => s.mile_marker), [body.route.distance_miles]);",
+                  "  for (let i = 1; i < marks.length; i++) pm.expect(marks[i] - marks[i - 1]).to.be.at.most(500);",
+                  "});",
+                  "pm.test('fuel consumed is distance / 10 MPG', () => {",
+                  "  pm.expect(body.summary.fuel_consumed_gallons).to.be.closeTo(body.route.distance_miles / 10, 0.05);",
+                  "});",
+                  "pm.test('total cost is the sum of the stops', () => {",
+                  "  const sum = body.fuel_stops.reduce((t, s) => t + s.cost, 0);",
+                  "  pm.expect(body.summary.total_fuel_cost).to.be.closeTo(sum, 0.02);",
+                  "  body.fuel_stops.forEach(s => pm.expect(s.cost).to.be.closeTo(s.gallons_purchased * s.price_per_gallon, 0.02));",
+                  "});",
+                  "pm.test('lists the stations weighed and explains each stop', () => {",
+                  "  const miles = body.stations_on_route.map(s => s.mile_marker);",
+                  "  pm.expect(miles).to.eql([...miles].sort((a, b) => a - b));",
+                  "  const ids = new Set(body.stations_on_route.map(s => s.station_id));",
+                  "  body.fuel_stops.forEach((s, i) => {",
+                  "    pm.expect(ids.has(s.station_id)).to.be.true;",
+                  "    pm.expect(s.decision.action).to.be.oneOf(['fill_up', 'just_enough', 'finish']);",
+                  "    pm.expect(s.decision.action === 'finish').to.eql(i === body.fuel_stops.length - 1);",
+                  "  });",
+                  "});",
+                  "pm.test('keeps the reserve and the minimum purchase at every stop', () => {",
+                  "  body.fuel_stops.forEach(s => {",
+                  "    pm.expect(s.fuel_on_arrival_gallons).to.be.at.least(body.vehicle.reserve_gallons - 0.01);",
+                  "    pm.expect(s.gallons_purchased).to.be.at.least(body.summary.min_purchase_gallons - 0.01);",
+                  "  });",
+                  "  pm.expect(body.summary.total_cost_including_stop_cost).to.be.closeTo(body.summary.total_fuel_cost + body.summary.stop_cost_usd * body.summary.number_of_stops, 0.02);",
+                  "});",
+                  "pm.test('stop costs are exact receipts and the total is their sum', () => {",
+                  "  body.fuel_stops.forEach(s => pm.expect(s.cost).to.eql(Math.round(s.gallons_purchased * s.price_per_gallon * 100) / 100));",
+                  "  const sum = Math.round(body.fuel_stops.reduce((t, s) => t + s.cost, 0) * 100) / 100;",
+                  "  pm.expect(body.summary.total_fuel_cost).to.eql(sum);",
+                  "});",
+                  "pm.test('trip fuel cost prices the starting tank at the first stop', () => {",
+                  "  const s = body.summary, fromStart = s.fuel_consumed_gallons - s.fuel_purchased_gallons;",
+                  "  pm.expect(s.trip_fuel_cost).to.be.closeTo(fromStart * body.fuel_stops[0].price_per_gallon + s.total_fuel_cost, 0.02);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Short route, no stop needed (Dallas to Houston)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/route/?start=Dallas, TX&finish=Houston, TX",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "route",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "start",
+                  "value": "Dallas, TX"
+                },
+                {
+                  "key": "finish",
+                  "value": "Houston, TX"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('trip under 500 miles has no fuel stops and zero cost', () => {",
+                  "  pm.expect(body.route.distance_miles).to.be.below(500);",
+                  "  pm.expect(body.fuel_stops).to.eql([]);",
+                  "  pm.expect(body.summary.total_fuel_cost).to.eql(0);",
+                  "  pm.expect(body.summary.fuel_consumed_gallons).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST with JSON body (New York to Los Angeles)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"start\": \"New York, NY\", \"finish\": \"Los Angeles, CA\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/route/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "route",
+                ""
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('cross-country trip needs several stops within range', () => {",
+                  "  pm.expect(body.fuel_stops.length).to.be.at.least(5);",
+                  "  const marks = [0].concat(body.fuel_stops.map(s => s.mile_marker), [body.route.distance_miles]);",
+                  "  for (let i = 1; i < marks.length; i++) pm.expect(marks[i] - marks[i - 1]).to.be.at.most(500);",
+                  "  pm.expect(body.summary.total_fuel_cost).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Coordinates as input (Denver to Atlanta)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/route/?start=39.7392,-104.9903&finish=33.7490,-84.3880",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "route",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "start",
+                  "value": "39.7392,-104.9903"
+                },
+                {
+                  "key": "finish",
+                  "value": "33.7490,-84.3880"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('plan returned for lat,lon input', () => {",
+                  "  pm.expect(body.start.latitude).to.eql(39.7392);",
+                  "  pm.expect(body.fuel_stops.length).to.be.at.least(2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Map page (HTML)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/route/map/?start=Chicago, IL&finish=Miami, FL",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "route",
+                "map",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "start",
+                  "value": "Chicago, IL"
+                },
+                {
+                  "key": "finish",
+                  "value": "Miami, FL"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns the HTML map page wired to the API', () => {",
+                  "  pm.expect(pm.response.headers.get('Content-Type')).to.include('text/html');",
+                  "  pm.expect(pm.response.text()).to.include('leaflet').and.include('data-route-url');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pure cheapest plan (rules switched off)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/route/?start=Chicago, IL&finish=Miami, FL&stop_cost=0&reserve_miles=0&min_purchase_gallons=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "route",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "start",
+                  "value": "Chicago, IL"
+                },
+                {
+                  "key": "finish",
+                  "value": "Miami, FL"
+                },
+                {
+                  "key": "stop_cost",
+                  "value": "0"
+                },
+                {
+                  "key": "reserve_miles",
+                  "value": "0"
+                },
+                {
+                  "key": "min_purchase_gallons",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('rules are off for this request', () => {",
+                  "  pm.expect(body.summary.stop_cost_usd).to.eql(0);",
+                  "  pm.expect(body.summary.safety_reserve_miles).to.eql(0);",
+                  "  pm.expect(body.summary.min_purchase_gallons).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Same places, different spelling (echoes its own text)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/route/?start=chicago, illinois&finish=miami, florida",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "route",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "start",
+                  "value": "chicago, illinois"
+                },
+                {
+                  "key": "finish",
+                  "value": "miami, florida"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('echoes this request\\'s text, not a cached one', () => {",
+                  "  pm.expect(body.start.query).to.eql('chicago, illinois');",
+                  "  pm.expect(body.finish.query).to.eql('miami, florida');",
+                  "  pm.expect(body.start.resolved).to.eql('Chicago, IL');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Location suggestions",
+      "item": [
+        {
+          "name": "Suggest by city prefix (chi)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/locations/?q=chi",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "locations",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "chi"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('largest matching city comes first', () => pm.expect(body.results[0].label).to.eql('Chicago, IL'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Suggest cities for a state (FL)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/locations/?q=FL",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "locations",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "FL"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('first five results are Florida cities', () => body.results.slice(0, 5).forEach(r => pm.expect(r.state).to.eql('FL')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Suggest despite a spelling mistake (Chcago)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/locations/?q=Chcago",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "locations",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "Chcago"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('offers Chicago, IL', () => pm.expect(body.results.map(r => r.label)).to.include('Chicago, IL'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Errors",
+      "item": [
+        {
+          "name": "Misspelled location names the field and suggests (400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/route/?start=Chcago, IL&finish=Miami, FL",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "route",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "start",
+                  "value": "Chcago, IL"
+                },
+                {
+                  "key": "finish",
+                  "value": "Miami, FL"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const error = pm.response.json().error;",
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('error points at the start field and suggests Chicago, IL', () => {",
+                  "  pm.expect(error.code).to.eql('location_not_resolved');",
+                  "  pm.expect(error.field).to.eql('start');",
+                  "  pm.expect(error.suggestions).to.include('Chicago, IL');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Missing finish (400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/route/?start=Chicago, IL",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "route",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "start",
+                  "value": "Chicago, IL"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('error code is invalid_request', () => pm.expect(pm.response.json().error.code).to.eql('invalid_request'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Location outside the USA (400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/route/?start=Toronto, ON&finish=Miami, FL",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "route",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "start",
+                  "value": "Toronto, ON"
+                },
+                {
+                  "key": "finish",
+                  "value": "Miami, FL"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('error code is location_not_resolved', () => pm.expect(pm.response.json().error.code).to.eql('location_not_resolved'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "No driving route (422)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/route/?start=Honolulu, HI&finish=Miami, FL",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "route",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "start",
+                  "value": "Honolulu, HI"
+                },
+                {
+                  "key": "finish",
+                  "value": "Miami, FL"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('error code is route_not_found', () => pm.expect(pm.response.json().error.code).to.eql('route_not_found'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "No stations within range: trip still returned with the reason (422)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/route/?start=Los Angeles, CA&finish=Seattle, WA",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "route",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "start",
+                  "value": "Los Angeles, CA"
+                },
+                {
+                  "key": "finish",
+                  "value": "Seattle, WA"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('error code is no_feasible_fuel_plan', () => pm.expect(body.error.code).to.eql('no_feasible_fuel_plan'));",
+                  "pm.test('the route and the gap are still returned', () => {",
+                  "  pm.expect(body.route.distance_miles).to.be.above(1000);",
+                  "  pm.expect(body.route.geometry.coordinates.length).to.be.above(100);",
+                  "  pm.expect(body.gap.to_mile - body.gap.from_mile).to.be.above(500);",
+                  "  pm.expect(body.stations_on_route.length).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rule override out of range (400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/route/?start=Chicago, IL&finish=Miami, FL&stop_cost=99",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "route",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "start",
+                  "value": "Chicago, IL"
+                },
+                {
+                  "key": "finish",
+                  "value": "Miami, FL"
+                },
+                {
+                  "key": "stop_cost",
+                  "value": "99"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const error = pm.response.json().error;",
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('error names the stop_cost field', () => {",
+                  "  pm.expect(error.code).to.eql('invalid_request');",
+                  "  pm.expect(error.field).to.eql('stop_cost');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Coordinates outside the USA: Windsor, ON (400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/route/?start=42.3149,-83.0364&finish=Miami, FL",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "route",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "start",
+                  "value": "42.3149,-83.0364"
+                },
+                {
+                  "key": "finish",
+                  "value": "Miami, FL"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const error = pm.response.json().error;",
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('start is rejected as outside the USA', () => {",
+                  "  pm.expect(error.code).to.eql('location_not_resolved');",
+                  "  pm.expect(error.field).to.eql('start');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

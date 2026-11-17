@@ -1,0 +1,55 @@
+opis_id,name,address,city,state,rack_id,price,price_samples,reason
+203,PILOT TRAVEL CENTER #31,"I-80/94, EXIT 2",Highland,IN,365,3.814,2,ambiguous: 2 same-named places up to 242 mi apart
+1342,Delta,"I-80, EXIT 47B",Fairfield,NJ,115,3.20233,1,ambiguous: 2 same-named places up to 115 mi apart
+2022,GO MART FOOD STORE #86,"I-79, EXIT 40 & SR-16",Ivydale,WV,44,3.599,1,ambiguous: 2 same-named places up to 39 mi apart
+2192,GO MART FOOD STORE #51,US-19/SR-129,Mount Nebo,WV,44,3.599,1,ambiguous: 2 same-named places up to 115 mi apart
+2982,CIRCLE K #2723726,"I-59/I-20, EXIT 52 & US-11/US-43/SR-7",Knoxville,AL,705,3.089,1,ambiguous: 2 same-named places up to 117 mi apart
+5079,FASTLANE TAYLOR 63,US-61 & SR-6,Taylor,MO,494,3.01567,1,ambiguous: 4 same-named places up to 208 mi apart
+6315,AYERCO #25,US-24,Taylor,MO,494,3.01567,1,ambiguous: 4 same-named places up to 208 mi apart
+6760,BETTY BEAVERS TRUCKSTOP,"I-87, EXIT 32",Lewis,NY,12,3.669,2,ambiguous: 2 same-named places up to 115 mi apart
+7072,TA ANTIOCH TRAVEL CENTER,"I-24, EXIT 62",Antioch,TN,460,3.50567,1,ambiguous: 12 same-named places up to 291 mi apart
+7078,TA DENMARK TRAVEL CENTER,"I-40 & SR-138, EXIT 68",Denmark,TN,435,3.539,1,ambiguous: 2 same-named places up to 90 mi apart
+52598,7-ELEVEN #40283,"I-76, EXIT 19/247",Middletown,PA,70,3.97067,1,ambiguous: 2 same-named places up to 80 mi apart
+52602,7-ELEVEN #40277,"I-76, EXIT 16/226",Newburg,PA,70,4.299,1,ambiguous: 3 same-named places up to 53 mi apart
+52649,FLYING J TRAVEL PLAZA #623,"I-10, EXIT 192 & US-90",Midway,FL,20,3.799,1,ambiguous: 3 same-named places up to 227 mi apart
+61021,WESTOVER GOOSE CREEK,US-13 & SR-673,Westover,MD,194,3.259,1,ambiguous: 2 same-named places up to 103 mi apart
+62008,LOVES TRAVEL STOP #366,"I-81, EXIT 90",Jonestown,PA,70,3.85733,1,ambiguous: 2 same-named places up to 50 mi apart
+63754,U SAVE TRAVEL PLAZA,US-19 & SR-129,Mount Nebo,WV,44,3.599,1,ambiguous: 2 same-named places up to 115 mi apart
+63978,Gallops,"I-80, EXIT 107",Middlebury,IN,370,3.549,1,ambiguous: 2 same-named places up to 182 mi apart
+64523,SKY CITY TRAVEL CENTER,"I-40, EXIT 102 NORTH",Pueblo Of Acoma,NM,580,3.28067,1,city not found in any gazetteer
+64595,PILOT TRAVEL CENTERS #425,"I-10, EXIT 192",Midway,FL,20,3.799,2,ambiguous: 3 same-named places up to 227 mi apart
+64825,EXIT 10 AUTO AND TRUCK STOP,"I-185/SR-411, EXIT 19 & SR-315",Fortson,GA,50,3.399,1,ambiguous: 2 same-named places up to 65 mi apart
+65086,FRED MOORE BP,"I-94, EXIT 257",Casco,MI,325,4.099,1,ambiguous: 2 same-named places up to 181 mi apart
+65533,LIBERTY EXXON,US-15 & SR-414,Liberty,PA,138,3.699,1,ambiguous: 2 same-named places up to 167 mi apart
+66332,PWI #172,"I-45, EXIT 258",Palmer,TX,630,2.77567,1,ambiguous: 2 same-named places up to 443 mi apart
+66598,WOODSHED LL,I-166 & I-169,S Coffeyville,OK,307,3.099,1,city not found in any gazetteer
+66601,LOVES TRAVEL STOP #323,"I-69, EXIT 264 & SR-18",Marion,IN,457,3.57567,1,ambiguous: 2 same-named places up to 67 mi apart
+66863,101 TRAVEL PLAZA,"I-40, EXIT 101 & SR-104",Cedar Grove,TN,435,2.999,1,ambiguous: 14 same-named places up to 254 mi apart
+68009,CIRCLE K #2741779,"US-270, EXIT 2",Hot Springs National Park,AR,695,3.369,1,city not found in any gazetteer
+68157,RAJS MINI MART,US-1/SR-29,Morrisville,PA,230,3.899,1,ambiguous: 2 same-named places up to 286 mi apart
+68185,CITGO,US-22/SR-72,Jonestown,PA,70,3.749,1,ambiguous: 2 same-named places up to 50 mi apart
+68927,MARATHON,US-19 & SR-80,Rosedale,VA,185,3.749,1,ambiguous: 2 same-named places up to 262 mi apart
+69236,KWIK TRIP #225,SR-54/SR-55,Seymour,WI,582,3.39067,1,ambiguous: 2 same-named places up to 154 mi apart
+69308,LOVES TRAVEL STOP #535,SR-283,Middletown,PA,70,3.759,1,ambiguous: 2 same-named places up to 80 mi apart
+69345,RUTTERS #20,"I-76, EXIT 247 & I-283, EXIT 1A",Middletown,PA,70,3.82233,1,ambiguous: 2 same-named places up to 80 mi apart
+69588,FUEL CITY,"I-30, EXIT 52B & US-80",Mesquite,TX,630,2.96567,1,ambiguous: 2 same-named places up to 462 mi apart
+69636,PETRO WILMINGTON,"I-55, EXIT 240",Wilmington,IL,290,3.4715,4,ambiguous: 2 same-named places up to 176 mi apart
+69819,FLYING J #1086,SR-18 & SR-5,Marion,IN,457,3.569,2,ambiguous: 2 same-named places up to 67 mi apart
+69947,THORNTONS #607,I-24 EXIT 62 & SR-171,Antioch,TN,460,2.899,1,ambiguous: 12 same-named places up to 291 mi apart
+70453,MARIETTA PETROLEUM,"I-35, EXIT 15 & SR-32",Marietta,OK,253,2.92233,1,ambiguous: 2 same-named places up to 193 mi apart
+70563,PILOT DEALER #1234,US-93 & CR-145,Willow Beach,AZ,910,3.869,2,city not found in any gazetteer
+70592,LOVES TRAVEL STOP #751,"I-20, EXIT 87",Elgin,SC,135,3.42567,1,ambiguous: 2 same-named places up to 34 mi apart
+70741,CASEYS #3590,US-27,Geneva,IN,465,3.594,1,ambiguous: 2 same-named places up to 93 mi apart
+70916,TA Express White Hills,US-93,Willow Beach,AZ,910,3.779,1,city not found in any gazetteer
+70966,QUARLES #4927,SR-10 & SR-145,Chesterfield,VA,180,3.699,1,ambiguous: 4 same-named places up to 137 mi apart
+71242,LAST STOP TRAVEL CENTER,US-93,Willow Beach,AZ,910,3.49567,1,city not found in any gazetteer
+71259,LOVES TRAVEL STOP #846,I-10 EXIT 10,Irvington,AL,715,3.16567,1,ambiguous: 2 same-named places up to 295 mi apart
+71594,BP,US-20 & SR13,Middlebury,IN,465,3.799,1,ambiguous: 2 same-named places up to 182 mi apart
+71646,SPEEDWAY #6542,"I-10, Exit 192",Midway,FL,155,3.599,1,ambiguous: 3 same-named places up to 227 mi apart
+72122,KWIK TRIP #1115,US-63 & US-8,Turtle Lake,WI,295,3.65567,1,ambiguous: 2 same-named places up to 252 mi apart
+72146,HUTTER'S,SR-72,Jonestown,PA,70,3.719,1,ambiguous: 2 same-named places up to 50 mi apart
+72242,ROYAL FARMS #311,SR-7 & SR-43,Nottingham,MD,22,3.269,1,ambiguous: 3 same-named places up to 15 mi apart
+72268,SHORT STOP,US-67/283,Santa Anna,TX,575,3.499,1,ambiguous: 2 same-named places up to 353 mi apart
+72292,SUNSTOP #336,SR-121 & CR-18,Lake Butler,FL,75,3.59233,1,ambiguous: 2 same-named places up to 115 mi apart
+72966,MCCLURE STORE #15,SR-9,Marion,IN,370,3.694,1,ambiguous: 2 same-named places up to 67 mi apart
+73090,Quiktrip #1148,I-26 EXIT 53,Flat Rock,NC,210,2.849,1,ambiguous: 2 same-named places up to 135 mi apart
