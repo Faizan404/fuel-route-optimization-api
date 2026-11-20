@@ -4,6 +4,9 @@ A Django REST API that plans fuel stops for a truck driving between two places i
 Give it a start and a finish; it returns the driving route, a map, the most cost-effective
 places to refuel along the way, and the total money spent on fuel.
 
+**Video walkthrough (Loom):** https://www.loom.com/share/044df27a5d3145b3b473bd2409172925
+(the API in Postman and a quick tour of the code)
+
 **Contents**
 
 1. [Quick start](#1-quick-start)
